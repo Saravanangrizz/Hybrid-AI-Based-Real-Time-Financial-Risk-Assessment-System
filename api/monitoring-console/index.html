@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Hybrid AI Fraud Monitoring Console</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <script type="module">
+    /*********************************************************
+     * GLOBAL CONFIG
+     *********************************************************/
+    const SCORING_API_URL = "https://hybrid-ai-based-real-time-financial-risk.onrender.com/score_transaction";
+    const API_AUTHORIZATION_TOKEN = "Bearer SECURE_API_KEY_12345";
+    const RISK_THRESHOLD = 60;
+
+    let isFirebaseReady = false;
+    let currentUserId = "anonymous";
+    let simulationInterval = null;
+    let transactionCounter = 1000;
+
+    /*********************************************************
+     * FIREBASE (DISABLED FOR LOCAL API TESTING)
+     *********************************************************/
+    async function initializeFirebase() {
+      console.warn("Firebase disabled for local API integration testing.");
+
+      isFirebaseReady = true;
+      currentUserId = "local-test-user";
+
+      document.getElementById("user-id").textContent = currentUserId;
+      document.getElementById("status-message").textContent =
+        "Local API mode (Firebase disabled)";
+    }
+
+    /*********************************************************
+     * API CALL
+     *********************************************************/
+    async function callScoringAPI(transaction) {
+      const payload = {
+        transaction_id: transaction.id,
+        user_id: transaction.user_id,
+        amount: transaction.amount,
+        velocity_spike: transaction.velocity_spike,
+        location: transaction.location,
+        device_id: transaction.device_id,
+        time_hour: transaction.time_hour,
+        merchant_type: transaction.merchant_type
+      };
+
+      try {
+        const response = await fetch(SCORING_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": API_AUTHORIZATION_TOKEN
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+          const text = await response.text();
+          throw new Error(text);
+        }
+
+        const result = await response.json();
+        console.log("Fraud API response:", result);
+        return result;
+
+      } catch (err) {
+        console.error("API error:", err.message);
+        return {
+          decision: "ERROR",
+          final_risk_score: 0,
+          audit_breakdown: null,
+          processing_latency_ms: 0
+        };
+      }
+    }
+
+    /*********************************************************
+     * SIMULATION DATA
+     *********************************************************/
+    const USER_PROFILES = {
+      "U123": { geo: "New York", device: "Mobile-A", merchant: "groceries" },
+      "U456": { geo: "London", device: "Desktop-B", merchant: "e-commerce" },
+      "U789": { geo: "Tokyo", device: "Tablet-C", merchant: "utilities" },
+      "U999": { geo: "Paris", device: "Mobile-D", merchant: "entertainment" }
+    };
+
+    const USER_IDS = Object.keys(USER_PROFILES);
+
+    function randomChoice(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function randomFloat(min, max) {
+      return Math.random() * (max - min) + min;
+    }
+
+    function generateTransaction() {
+      transactionCounter++;
+      const user = randomChoice(USER_IDS);
+      const profile = USER_PROFILES[user];
+      const fraud = Math.random() < 0.3;
+
+      return {
+        id: `TXN_${transactionCounter}`,
+        user_id: user,
+        amount: fraud ? randomFloat(3000, 10000) : randomFloat(20, 500),
+        velocity_spike: fraud && Math.random() < 0.7,
+        location: fraud ? randomChoice(["Moscow", "Shanghai", "Dublin"]) : profile.geo,
+        device_id: Math.random() < 0.15 ? "Unknown-Device" : profile.device,
+        time_hour: fraud ? randomChoice([1, 2, 23]) : randomChoice([9, 11, 15]),
+        merchant_type: fraud ? "crypto" : profile.merchant
+      };
+    }
+
+    /*********************************************************
+     * TRANSACTION LOOP
+     *********************************************************/
+    async function processTransaction() {
+      if (!isFirebaseReady) return;
+
+      const txn = generateTransaction();
+      const result = await callScoringAPI(txn);
+
+      const score = result.final_risk_score;
+      const action = result.decision;
+
+      const row = document.createElement("div");
+      row.className =
+        `p-2 rounded text-xs border mb-1 ${
+          score >= RISK_THRESHOLD
+            ? "bg-red-100 border-red-400 text-red-800"
+            : "bg-gray-100 border-gray-300 text-gray-700"
+        }`;
+
+      row.innerHTML =
+        `[${new Date().toLocaleTimeString()}] 
+         <b>${txn.id}</b> | User: ${txn.user_id} | 
+         $${txn.amount.toFixed(2)} | 
+         <b>${score.toFixed(2)}%</b> (${action}) | 
+         ${result.processing_latency_ms.toFixed(0)} ms`;
+
+      const log = document.getElementById("transaction-log");
+      if (log.children.length > 25) log.removeChild(log.lastChild);
+      log.prepend(row);
+    }
+
+    function startSimulation() {
+      if (simulationInterval) return;
+      document.getElementById("status-message").textContent =
+        "Simulation running (calling FastAPI)...";
+      simulationInterval = setInterval(processTransaction, 1500);
+    }
+
+    function stopSimulation() {
+      clearInterval(simulationInterval);
+      simulationInterval = null;
+      document.getElementById("status-message").textContent =
+        "Simulation paused.";
+    }
+
+    /*********************************************************
+     * INIT
+     *********************************************************/
+    window.onload = () => {
+      initializeFirebase();
+      document.getElementById("api-url").textContent = SCORING_API_URL;
+      document.getElementById("start-btn").onclick = startSimulation;
+      document.getElementById("stop-btn").onclick = stopSimulation;
+    };
+  </script>
+</head>
+
+<body class="bg-gray-50 font-sans text-gray-800">
+
+<div class="min-h-screen flex flex-col">
+
+  <header class="bg-indigo-700 text-white p-4 shadow">
+    <div class="flex justify-between">
+      <h1 class="text-2xl font-bold">Hybrid AI Fraud Detection Console</h1>
+      <div class="text-right text-sm">
+        <div>Analyst: <span id="user-id">Authenticating…</span></div>
+        <div id="status-message" class="text-xs text-indigo-200">Starting…</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-grow max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <div class="bg-white p-6 rounded-xl shadow">
+      <h2 class="text-lg font-semibold mb-4 text-indigo-700">
+        Transaction Stream Simulator
+      </h2>
+
+      <div class="flex gap-4 mb-3">
+        <button id="start-btn" class="flex-1 bg-green-500 text-white p-3 rounded font-bold">
+          Start Secure Stream
+        </button>
+        <button id="stop-btn" class="flex-1 bg-red-500 text-white p-3 rounded font-bold">
+          Pause Stream
+        </button>
+      </div>
+
+      <div class="text-xs text-gray-500 mb-2">
+        API Endpoint:
+        <span id="api-url" class="text-indigo-600">LOADING…</span>
+      </div>
+
+      <div id="transaction-log"
+           class="bg-gray-100 p-4 rounded border h-96 overflow-y-auto text-sm">
+        <p class="text-center text-gray-400 mt-10">
+          Start the stream to see transactions…
+        </p>
+      </div>
+    </div>
+
+    <div class="bg-white p-6 rounded-xl shadow">
+      <h2 class="text-lg font-semibold mb-4 text-red-600">
+        High-Risk Alerts (API Output)
+      </h2>
+      <p class="text-gray-500">
+        Alerts are generated live based on fraud scores ≥ 60.
+        <br/>
+        (Firebase persistence disabled for local testing)
+      </p>
+    </div>
+
+  </main>
+</div>
+
+</body>
+</html>
