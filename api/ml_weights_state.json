@@ -1,0 +1,10 @@
+{
+    "risk_weights": {
+        "supervised_weight": 0.30000000000000004,
+        "unsupervised_weight": 0.6,
+        "behavior_weight": 0.1
+    },
+    "transaction_count": 0,
+    "supervised_fraud_hits": 0,
+    "anomaly_fraud_hits": 0
+}
