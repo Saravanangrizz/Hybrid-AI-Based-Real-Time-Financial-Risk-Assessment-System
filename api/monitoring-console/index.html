@@ -1,235 +1,349 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Hybrid AI Fraud Monitoring Console</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Hybrid AI Fraud Monitoring Console</title>
 
-  <script type="module">
-    /*********************************************************
-     * GLOBAL CONFIG
-     *********************************************************/
-    const SCORING_API_URL = "https://hybrid-ai-based-real-time-financial-risk.onrender.com/score_transaction";
-    const API_AUTHORIZATION_TOKEN = "Bearer SECURE_API_KEY_12345";
-    const RISK_THRESHOLD = 60;
+<script src="https://cdn.tailwindcss.com"></script>
 
-    let isFirebaseReady = false;
-    let currentUserId = "anonymous";
-    let simulationInterval = null;
-    let transactionCounter = 1000;
+<script type="module">
 
-    /*********************************************************
-     * FIREBASE (DISABLED FOR LOCAL API TESTING)
-     *********************************************************/
-    async function initializeFirebase() {
-      console.warn("Firebase disabled for local API integration testing.");
+const SCORING_API_URL =
+"https://hybrid-ai-based-real-time-financial-risk.onrender.com/score_transaction";
 
-      isFirebaseReady = true;
-      currentUserId = "local-test-user";
+const API_AUTHORIZATION_TOKEN =
+"Bearer SECURE_API_KEY_12345";
 
-      document.getElementById("user-id").textContent = currentUserId;
-      document.getElementById("status-message").textContent =
-        "Local API mode (Firebase disabled)";
-    }
+const RISK_THRESHOLD = 60;
 
-    /*********************************************************
-     * API CALL
-     *********************************************************/
-    async function callScoringAPI(transaction) {
-      const payload = {
-        transaction_id: transaction.id,
-        user_id: transaction.user_id,
-        amount: transaction.amount,
-        velocity_spike: transaction.velocity_spike,
-        location: transaction.location,
-        device_id: transaction.device_id,
-        time_hour: transaction.time_hour,
-        merchant_type: transaction.merchant_type
-      };
+let simulationInterval = null;
+let transactionCounter = 1000;
 
-      try {
-        const response = await fetch(SCORING_API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": API_AUTHORIZATION_TOKEN
-          },
-          body: JSON.stringify(payload)
-        });
+/* METRICS */
+let total = 0;
+let approved = 0;
+let flagged = 0;
+let blocked = 0;
 
-        if (!response.ok) {
-          const text = await response.text();
-          throw new Error(text);
-        }
+/* USERS */
 
-        const result = await response.json();
-        console.log("Fraud API response:", result);
-        return result;
+const USER_PROFILES = {
+ "U123": { geo: "New York", device: "Mobile-A", merchant: "groceries" },
+ "U456": { geo: "London", device: "Desktop-B", merchant: "e-commerce" },
+ "U789": { geo: "Tokyo", device: "Tablet-C", merchant: "utilities" },
+ "U999": { geo: "Paris", device: "Mobile-D", merchant: "entertainment" },
+ "U100":{geo:"New York",device:"iPhone-12",merchant:"groceries"},
+"U101":{geo:"London",device:"MacBook-Pro",merchant:"e-commerce"},
+"U102":{geo:"Tokyo",device:"Android-A52",merchant:"utilities"},
+"U103":{geo:"Paris",device:"iPad-Air",merchant:"entertainment"},
+"U104":{geo:"Berlin",device:"Android-S22",merchant:"electronics"},
+"U105":{geo:"Dubai",device:"iPhone-14",merchant:"fashion"},
+"U106":{geo:"Singapore",device:"MacBook-Air",merchant:"travel"},
+"U107":{geo:"Toronto",device:"Android-Pixel",merchant:"gaming"},
+"U108":{geo:"Sydney",device:"Windows-PC",merchant:"education"},
+"U109":{geo:"Mumbai",device:"Android-OnePlus",merchant:"food"},
+"U110":{geo:"Delhi",device:"iPhone-13",merchant:"electronics"},
+"U111":{geo:"San Francisco",device:"MacBook-Pro",merchant:"software"},
+"U112":{geo:"Chicago",device:"Android-S21",merchant:"shopping"},
+"U113":{geo:"Amsterdam",device:"iPad-Pro",merchant:"subscriptions"},
+"U114":{geo:"Rome",device:"Android-A51",merchant:"travel"},
+"U115":{geo:"Madrid",device:"iPhone-12",merchant:"food"},
+"U116":{geo:"Seoul",device:"Android-S23",merchant:"gaming"},
+"U117":{geo:"Bangkok",device:"Windows-Laptop",merchant:"tourism"},
+"U118":{geo:"Jakarta",device:"Android-Oppo",merchant:"retail"},
+"U119":{geo:"Cape Town",device:"Android-Xiaomi",merchant:"utilities"},
+"U120":{geo:"São Paulo",device:"iPhone-11",merchant:"entertainment"},
+"U121":{geo:"Mexico City",device:"Android-Huawei",merchant:"fashion"},
+"U122":{geo:"Istanbul",device:"Windows-PC",merchant:"electronics"},
+"U123":{geo:"Dubai",device:"MacBook-Pro",merchant:"luxury"},
+"U124":{geo:"Zurich",device:"iPhone-15",merchant:"banking"},
+"U125":{geo:"Stockholm",device:"Android-S20",merchant:"travel"},
+"U126":{geo:"Vienna",device:"MacBook-Air",merchant:"insurance"},
+"U127":{geo:"Helsinki",device:"Android-Pixel",merchant:"software"},
+"U128":{geo:"Oslo",device:"iPad-Mini",merchant:"education"},
+"U129":{geo:"Lisbon",device:"Android-Realme",merchant:"retail"}
+};
 
-      } catch (err) {
-        console.error("API error:", err.message);
-        return {
-          decision: "ERROR",
-          final_risk_score: 0,
-          audit_breakdown: null,
-          processing_latency_ms: 0
-        };
-      }
-    }
+const USER_IDS = Object.keys(USER_PROFILES);
 
-    /*********************************************************
-     * SIMULATION DATA
-     *********************************************************/
-    const USER_PROFILES = {
-      "U123": { geo: "New York", device: "Mobile-A", merchant: "groceries" },
-      "U456": { geo: "London", device: "Desktop-B", merchant: "e-commerce" },
-      "U789": { geo: "Tokyo", device: "Tablet-C", merchant: "utilities" },
-      "U999": { geo: "Paris", device: "Mobile-D", merchant: "entertainment" }
-    };
+function randomChoice(arr){
+ return arr[Math.floor(Math.random()*arr.length)];
+}
 
-    const USER_IDS = Object.keys(USER_PROFILES);
+function randomFloat(min,max){
+ return Math.random()*(max-min)+min;
+}
 
-    function randomChoice(arr) {
-      return arr[Math.floor(Math.random() * arr.length)];
-    }
+function generateTransaction(){
 
-    function randomFloat(min, max) {
-      return Math.random() * (max - min) + min;
-    }
+ transactionCounter++;
 
-    function generateTransaction() {
-      transactionCounter++;
-      const user = randomChoice(USER_IDS);
-      const profile = USER_PROFILES[user];
-      const fraud = Math.random() < 0.3;
+ const user=randomChoice(USER_IDS);
+ const profile=USER_PROFILES[user];
+ const fraud=Math.random()<0.3;
 
-      return {
-        id: `TXN_${transactionCounter}`,
-        user_id: user,
-        amount: fraud ? randomFloat(3000, 10000) : randomFloat(20, 500),
-        velocity_spike: fraud && Math.random() < 0.7,
-        location: fraud ? randomChoice(["Moscow", "Shanghai", "Dublin"]) : profile.geo,
-        device_id: Math.random() < 0.15 ? "Unknown-Device" : profile.device,
-        time_hour: fraud ? randomChoice([1, 2, 23]) : randomChoice([9, 11, 15]),
-        merchant_type: fraud ? "crypto" : profile.merchant
-      };
-    }
+ return{
+  id:`TXN_${transactionCounter}`,
+  user_id:user,
+  amount:fraud?randomFloat(3000,10000):randomFloat(20,500),
+  velocity_spike:fraud&&Math.random()<0.7,
+  location:fraud?randomChoice(["Moscow",
+"Shanghai",
+"Dublin",
+"Kyiv",
+"Lagos",
+"Bucharest",
+"Phnom Penh",
+"Karachi",
+"Almaty",
+"Ho Chi Minh City"]):profile.geo,
+  device_id:Math.random()<0.15?"Unknown-Device":profile.device,
+  time_hour:fraud?randomChoice([1,2,23]):randomChoice([9,11,15]),
+  merchant_type:fraud?"crypto":profile.merchant
+ };
 
-    /*********************************************************
-     * TRANSACTION LOOP
-     *********************************************************/
-    async function processTransaction() {
-      if (!isFirebaseReady) return;
+}
 
-      const txn = generateTransaction();
-      const result = await callScoringAPI(txn);
+/* API CALL */
 
-      const score = result.final_risk_score;
-      const action = result.decision;
+async function callScoringAPI(transaction){
 
-      const row = document.createElement("div");
-      row.className =
-        `p-2 rounded text-xs border mb-1 ${
-          score >= RISK_THRESHOLD
-            ? "bg-red-100 border-red-400 text-red-800"
-            : "bg-gray-100 border-gray-300 text-gray-700"
-        }`;
+ const payload={
+  transaction_id:transaction.id,
+  user_id:transaction.user_id,
+  amount:transaction.amount,
+  velocity_spike:transaction.velocity_spike,
+  location:transaction.location,
+  device_id:transaction.device_id,
+  time_hour:transaction.time_hour,
+  merchant_type:transaction.merchant_type
+ };
 
-      row.innerHTML =
-        `[${new Date().toLocaleTimeString()}] 
-         <b>${txn.id}</b> | User: ${txn.user_id} | 
-         $${txn.amount.toFixed(2)} | 
-         <b>${score.toFixed(2)}%</b> (${action}) | 
-         ${result.processing_latency_ms.toFixed(0)} ms`;
+ try{
 
-      const log = document.getElementById("transaction-log");
-      if (log.children.length > 25) log.removeChild(log.lastChild);
-      log.prepend(row);
-    }
+  const start=performance.now();
 
-    function startSimulation() {
-      if (simulationInterval) return;
-      document.getElementById("status-message").textContent =
-        "Simulation running (calling FastAPI)...";
-      simulationInterval = setInterval(processTransaction, 1500);
-    }
+  const response=await fetch(SCORING_API_URL,{
+   method:"POST",
+   headers:{
+    "Content-Type":"application/json",
+    "Authorization":API_AUTHORIZATION_TOKEN
+   },
+   body:JSON.stringify(payload)
+  });
 
-    function stopSimulation() {
-      clearInterval(simulationInterval);
-      simulationInterval = null;
-      document.getElementById("status-message").textContent =
-        "Simulation paused.";
-    }
+  const end=performance.now();
+  const clientLatency=(end-start);
 
-    /*********************************************************
-     * INIT
-     *********************************************************/
-    window.onload = () => {
-      initializeFirebase();
-      document.getElementById("api-url").textContent = SCORING_API_URL;
-      document.getElementById("start-btn").onclick = startSimulation;
-      document.getElementById("stop-btn").onclick = stopSimulation;
-    };
-  </script>
+  const result=await response.json();
+
+  result.client_latency_ms=clientLatency;
+
+  return result;
+
+ }
+ catch(err){
+
+  return{
+   decision:"ERROR",
+   final_risk_score:0,
+   processing_latency_ms:0,
+   client_latency_ms:0
+  }
+
+ }
+
+}
+
+/* METRICS */
+
+function updateMetrics(result){
+
+ total++;
+
+ if(result.decision==="APPROVED") approved++;
+ if(result.decision.includes("FLAGGED")) flagged++;
+ if(result.decision==="BLOCKED") blocked++;
+
+ document.getElementById("total").innerText=total;
+ document.getElementById("approved").innerText=approved;
+ document.getElementById("flagged").innerText=flagged;
+ document.getElementById("blocked").innerText=blocked;
+
+ const fraudRate=((blocked+flagged)/total)*100;
+
+ document.getElementById("fraudRate").innerText=
+ fraudRate.toFixed(2)+"%";
+
+}
+
+/* ALERTS */
+
+function addAlert(text){
+
+ const container=document.getElementById("alerts");
+
+ const div=document.createElement("div");
+
+ div.className="p-2 mb-2 bg-red-100 border border-red-400 text-red-800 text-sm rounded";
+
+ div.innerText=text;
+
+ if(container.children.length>15)
+ container.removeChild(container.lastChild);
+
+ container.prepend(div);
+
+}
+
+/* TRANSACTION PROCESS */
+
+async function processTransaction(){
+
+ const txn=generateTransaction();
+
+ const result=await callScoringAPI(txn);
+
+ const score=result.final_risk_score;
+ const decision=result.decision;
+
+ updateMetrics(result);
+
+ const row=document.createElement("div");
+
+ row.className=
+ `p-2 rounded text-xs border mb-1 ${
+  score>=RISK_THRESHOLD
+  ?"bg-red-100 border-red-400 text-red-800"
+  :"bg-gray-100 border-gray-300 text-gray-700"
+ }`;
+
+ row.innerHTML=
+ `[${new Date().toLocaleTimeString()}]
+ <b>${txn.id}</b> |
+ User: ${txn.user_id} |
+ $${txn.amount.toFixed(2)} |
+ <b>${score.toFixed(2)}%</b> (${decision}) |
+ ${result.client_latency_ms.toFixed(1)} ms`;
+
+ const log=document.getElementById("transaction-log");
+
+ if(log.children.length>30)
+ log.removeChild(log.lastChild);
+
+ log.prepend(row);
+
+ if(score>=RISK_THRESHOLD){
+
+  addAlert(
+  `${txn.id} BLOCKED | ${score.toFixed(2)}% risk`
+  );
+
+ }
+
+}
+
+/* SIMULATION */
+
+function startSimulation(){
+
+ if(simulationInterval) return;
+
+ simulationInterval=setInterval(processTransaction,1500);
+
+ document.getElementById("status").innerText="Simulation running";
+
+}
+
+function stopSimulation(){
+
+ clearInterval(simulationInterval);
+
+ simulationInterval=null;
+
+ document.getElementById("status").innerText="Simulation paused";
+
+}
+
+window.onload=()=>{
+
+ document.getElementById("api-url").innerText=SCORING_API_URL;
+
+ document.getElementById("start-btn").onclick=startSimulation;
+
+ document.getElementById("stop-btn").onclick=stopSimulation;
+
+}
+
+</script>
 </head>
 
-<body class="bg-gray-50 font-sans text-gray-800">
+<body class="bg-gray-50 font-sans">
 
-<div class="min-h-screen flex flex-col">
+<header class="bg-indigo-700 text-white p-4">
+<h1 class="text-2xl font-bold">Hybrid AI Fraud Detection Console</h1>
+<div id="status" class="text-sm">Ready</div>
+</header>
 
-  <header class="bg-indigo-700 text-white p-4 shadow">
-    <div class="flex justify-between">
-      <h1 class="text-2xl font-bold">Hybrid AI Fraud Detection Console</h1>
-      <div class="text-right text-sm">
-        <div>Analyst: <span id="user-id">Authenticating…</span></div>
-        <div id="status-message" class="text-xs text-indigo-200">Starting…</div>
-      </div>
-    </div>
-  </header>
+<main class="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-  <main class="flex-grow max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+<div class="bg-white p-6 rounded shadow">
 
-    <div class="bg-white p-6 rounded-xl shadow">
-      <h2 class="text-lg font-semibold mb-4 text-indigo-700">
-        Transaction Stream Simulator
-      </h2>
+<h2 class="font-semibold text-indigo-700 mb-3">
+Live Fraud Metrics
+</h2>
 
-      <div class="flex gap-4 mb-3">
-        <button id="start-btn" class="flex-1 bg-green-500 text-white p-3 rounded font-bold">
-          Start Secure Stream
-        </button>
-        <button id="stop-btn" class="flex-1 bg-red-500 text-white p-3 rounded font-bold">
-          Pause Stream
-        </button>
-      </div>
+<p>Total Transactions: <span id="total">0</span></p>
+<p>Approved: <span id="approved">0</span></p>
+<p>Flagged: <span id="flagged">0</span></p>
+<p>Blocked: <span id="blocked">0</span></p>
+<p>Fraud Rate: <span id="fraudRate">0%</span></p>
 
-      <div class="text-xs text-gray-500 mb-2">
-        API Endpoint:
-        <span id="api-url" class="text-indigo-600">LOADING…</span>
-      </div>
-
-      <div id="transaction-log"
-           class="bg-gray-100 p-4 rounded border h-96 overflow-y-auto text-sm">
-        <p class="text-center text-gray-400 mt-10">
-          Start the stream to see transactions…
-        </p>
-      </div>
-    </div>
-
-    <div class="bg-white p-6 rounded-xl shadow">
-      <h2 class="text-lg font-semibold mb-4 text-red-600">
-        High-Risk Alerts (API Output)
-      </h2>
-      <p class="text-gray-500">
-        Alerts are generated live based on fraud scores ≥ 60.
-        <br/>
-        (Firebase persistence disabled for local testing)
-      </p>
-    </div>
-
-  </main>
 </div>
+
+<div class="bg-white p-6 rounded shadow">
+
+<h2 class="font-semibold text-indigo-700 mb-3">
+Transaction Stream
+</h2>
+
+<div class="flex gap-2 mb-3">
+
+<button id="start-btn"
+class="bg-green-500 text-white px-4 py-2 rounded">
+Start
+</button>
+
+<button id="stop-btn"
+class="bg-red-500 text-white px-4 py-2 rounded">
+Pause
+</button>
+
+</div>
+
+<div class="text-xs mb-2">
+API:
+<span id="api-url"></span>
+</div>
+
+<div id="transaction-log"
+class="bg-gray-100 p-3 h-96 overflow-y-auto text-sm">
+</div>
+
+</div>
+
+<div class="bg-white p-6 rounded shadow">
+
+<h2 class="font-semibold text-red-600 mb-3">
+High Risk Alerts
+</h2>
+
+<div id="alerts"></div>
+
+</div>
+
+</main>
 
 </body>
 </html>
